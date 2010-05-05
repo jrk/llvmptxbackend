@@ -1,0 +1,60 @@
+Basically, the way Tom set this up is to allow all of us to use our own versions
+of LLVM in a local repository (on the machine where we have checked out LLVM) and
+still be able use each other's "passes" using shared libraries. This also gives a 
+way of cleanly separating our passes from LLVM-core passes at the cost of some
+additional command line options to opt. Here is one way to set up and start adding
+new passes as shared libraries and use other passes too.
+
+(1) First, make sure some environment variables are set up:
+
+Assuming you already have the following environment variables defined:
+
+LLVM_SRC_ROOT       (eg, /home/pprabhu/llvm/llvm/)
+LLVM_OBJ_DIR        (eg, /home/pprabhu/llvm/llvm-objects/)
+LLVM_INSTALL_DIR    (eg, /home/pprabhu/llvm/llvm-install/)
+
+set up our additional Liberty specific include directory (using the absolute path):
+
+export LIBERTY_INCLUDE_DIR=/home/pprabhu/svn/trunk/liberty/src/llvm-liberty/include/
+
+(2) Configure the build system:
+
+~/svn/trunk/liberty/src/llvm-liberty$ ./configure --with-llvmsrc=$LLVM_SRC_ROOT \
+                                                  --with-llvmobj=$LLVM_OBJ_DIR \
+                                                  --prefix=$LLVM_INSTALL_DIR \
+                                                  --exec-prefix=$LLVM_INSTALL_DIR \
+                                                  --includedir=$LIBERTY_INCLUDE_DIR 
+
+(3) Create a new directory for any new set of passes you want to add within the lib
+directory, create .cpp files within that directory while the include directory has 
+Liberty-specific .h files required by the .cpp files
+
+(4) Once you have created a new pass within that directory, you can build it and test
+it out as follows: Taking the example of -irreducible (which tests whether a function is 
+irreducible or not):
+
+pprabhu@pprabhu-desktop:~/svn/trunk/liberty/src/llvm-liberty/lib/Irreducibility$ make
+
+llvm[0]: Compiling IntervalRegionGraph.cpp for Debug build  (PIC)
+llvm[0]: Compiling IrreducibiltyRemover.cpp for Debug build  (PIC)
+llvm[0]: Compiling IrreducibiltyTester.cpp for Debug build  (PIC)
+llvm[0]: Linking Debug Shared Library Irreducibility.so
+llvm[0]: Linking Debug Object Library Irreducibility.o
+
+pprabhu@pprabhu-desktop:~/svn/trunk/liberty/src/llvm-liberty/lib/Irreducibility$ make install 
+
+pprabhu@pprabhu-desktop:~/llvm/llvm-install/lib$ ls libIrreducibility.so -lh
+lrwxrwxrwx 1 pprabhu liberators 26 2008-09-04 18:40 libIrreducibility.so -> libIrreducibility.so.0.0.0*
+
+pprabhu@pprabhu-desktop:~/llvm/llvm-play$ opt -stats -load ~/llvm/llvm-install/lib/libIrreducibility.so -irreducible < main.bc
+===-------------------------------------------------------------------------===
+                          ... Statistics Collected ...
+===-------------------------------------------------------------------------===
+
+3  - Number of functions
+2  - Number of functions with irreducible control flow graphs
+
+
+
+
+Written by Prakash, 4th Sep 2008.

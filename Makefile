@@ -1,0 +1,24 @@
+##===- projects/sample/Makefile ----------------------------*- Makefile -*-===##
+#
+# This is a sample Makefile for a project that uses LLVM.
+#
+##===----------------------------------------------------------------------===##
+
+#
+# Indicates our relative path to the top of the project's root directory.
+#
+LEVEL = .
+DIRS = lib support
+EXTRA_DIST = include
+
+#
+# Include the Master Makefile that knows how to build all.
+#
+include $(LEVEL)/Makefile.common
+
+updateDocs :
+	rm -rf docs
+	PROJ_SRC_ROOT=$(PROJ_SRC_ROOT) doxygen $(PROJ_SRC_ROOT)/Doxyfile 2>/dev/null > /dev/null
+
+
+

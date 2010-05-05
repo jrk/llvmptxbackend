@@ -8,11 +8,6 @@ LEVEL=..
 #
 # List all of the subdirectories that we will compile.
 #
-#DIRS=Scratch
-DIRS=PDG Exclusions Target Partition MTCG RenameBasicBlocks Utilities \
-   DependenceRemover MiscProfilers LW SMTAliasAnalysis Negotiator RMT \
-   ClangAnnotationExtractor Privatization ISpecLoopPDG AggressiveDepRemover \
-   CommutativeSetManager DOALLTransform Analysis BlockLocalVarsManager \
-   PTXBackend PTXUtil
+DIRS=PTXBackend PTXUtil
 
 include $(LEVEL)/Makefile.common

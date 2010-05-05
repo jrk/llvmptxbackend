@@ -29,6 +29,4 @@ using namespace llvm;
 
 Target llvm::ThePTXBackendTarget;
 
-extern "C" void LLVMInitializePTXBackendTargetInfo() { 
-  RegisterTarget<> X(ThePTXBackendTarget, "ptx", "PTX backend");
-}
+static RegisterTarget<> X(ThePTXBackendTarget, "ptx", "PTX backend");

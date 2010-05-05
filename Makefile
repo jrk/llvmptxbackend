@@ -8,7 +8,7 @@
 # Indicates our relative path to the top of the project's root directory.
 #
 LEVEL = .
-DIRS = lib support
+DIRS = lib
 EXTRA_DIST = include
 
 #
@@ -19,6 +19,3 @@ include $(LEVEL)/Makefile.common
 updateDocs :
 	rm -rf docs
 	PROJ_SRC_ROOT=$(PROJ_SRC_ROOT) doxygen $(PROJ_SRC_ROOT)/Doxyfile 2>/dev/null > /dev/null
-
-
-

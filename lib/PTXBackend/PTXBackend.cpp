@@ -24,36 +24,30 @@
  *
  * This library converts LLVM code to PTX code
  *
- * @TODO: test pass which checks code for recursion etc., struct alignment, 
+ * @TODO: test pass which checks code for recursion etc., struct alignment,
  *        no malloc, no assembler
  * @TODO: .uni in branch and function calls
  * @TODO: struct return, local memory...
  * @TODO: struct with different sizes (char & int => alignment?)
- * @TODO: approx still needed? wirte function instructionNeedsApprox()
+ * @TODO: approx still needed? write function instructionNeedsApprox()
  * @TODO: shift operations only take 32 bit operands as offset
  * @TODO: use intrinsics for threadid.x etc.
  */
 #include "PTXBackend.h"
 #include "PTXPasses.h"
 
-extern "C" void LLVMInitializePTXBackendTarget() {
-  // Register the target.
-  RegisterTargetMachine<PTXTargetMachine> X(ThePTXBackendTarget);
-}
-
+// Register the target.
+static RegisterTargetMachine<PTXTargetMachine> X(ThePTXBackendTarget);
 
 using namespace llvm;
 
-//namespace {
-
- 
 char PTXWriter::ID = 0;
 unsigned int PTXWriter::POINTER_SIZE = 32;
 
 std::string PTXWriter::getSimpleTypeStr(const Type *Ty, bool isSigned)
 {
   assert((Ty->isPrimitiveType() || Ty->isIntegerTy() || isa<VectorType>(Ty)) &&
-         "Invalid type for getSimpleType");
+	 "Invalid type for getSimpleType");
   switch (Ty->getTypeID()) {
   case Type::VoidTyID:
   {
@@ -70,8 +64,13 @@ std::string PTXWriter::getSimpleTypeStr(const Type *Ty, bool isSigned)
     {
       if(!(NumBits == 8 || NumBits == 16 || NumBits == 32 || NumBits == 64))
 	Ty->dump();
-      assert((NumBits == 8 || NumBits == 16 || NumBits == 32 || NumBits == 64) 
+      assert((NumBits == 8 || NumBits == 16 || NumBits == 32 || NumBits == 64)
 	     && "Bitsize not supported!!");
+
+      // Use of 8-bit registers is highly restricted.
+      if(NumBits == 8) {
+	NumBits = 16;
+      }
       std::stringstream tmpStream;
       tmpStream << '.' <<  (isSigned?"s":"u") << NumBits;
       return tmpStream.str();
@@ -85,8 +84,8 @@ std::string PTXWriter::getSimpleTypeStr(const Type *Ty, bool isSigned)
   {
     const VectorType *VTy = cast<VectorType>(Ty);
       std::stringstream tmpStream;
-      tmpStream << ".v" 
-		<< VTy->getNumElements() 
+      tmpStream << ".v"
+		<< VTy->getNumElements()
 		<< getSimpleTypeStr(VTy->getElementType(), isSigned);
 
       return tmpStream.str();
@@ -100,8 +99,8 @@ std::string PTXWriter::getSimpleTypeStr(const Type *Ty, bool isSigned)
 }
 
 std::string PTXWriter::getTypeStr(const Type *Ty,
-                                 bool isSigned,
-                                 bool IgnoreName, const AttrListPtr &PAL) 
+				 bool isSigned,
+				 bool IgnoreName, const AttrListPtr &PAL)
 {
   if (Ty->isPrimitiveType() || Ty->isIntegerTy() || isa<VectorType>(Ty)) {
     return getSimpleTypeStr(Ty, isSigned);
@@ -110,7 +109,7 @@ std::string PTXWriter::getTypeStr(const Type *Ty,
   switch (Ty->getTypeID()) {
   case Type::PointerTyID:
   {
-    // all pointers are represented throught POINTER_SIZE=32 bit unsigned int 
+    // all pointers are represented throught POINTER_SIZE=32 bit unsigned int
     // addresses
     return getTypeStr(IntegerType::get(Ty->getContext(), POINTER_SIZE), false);
   }
@@ -126,7 +125,7 @@ std::string PTXWriter::getTypeStr(const Type *Ty,
     assert(false && " opaque not implemented");
   }
   default:
-    errs() << "Unhandled case in getTypeProps! " << *Ty 
+    errs() << "Unhandled case in getTypeProps! " << *Ty
 	   << " | " << Ty->getTypeID() << "\n";
     //    assert(0 && "Unhandled case in getTypeProps!");
     abort();
@@ -137,7 +136,7 @@ std::string PTXWriter::getTypeStr(const Type *Ty,
 // TODO: dept
 std::string PTXWriter::getConstant(const Constant *CPV, int dept = 0)
 {
-  // undef value is allowed to have an arbitrary value, here 0. 
+  // undef value is allowed to have an arbitrary value, here 0.
   // TODO: better solution eg. any used register?
   if(isa<UndefValue>(CPV))
     return "0"; //TODO what about undef structs,floats...??
@@ -147,20 +146,20 @@ std::string PTXWriter::getConstant(const Constant *CPV, int dept = 0)
     switch (constExp->getOpcode())
     {
       default:
-        errs() << "================== WARNING: ConstantExp: " 
-	       << constExp->getOpcodeName() 
+	errs() << "================== WARNING: ConstantExp: "
+	       << constExp->getOpcodeName()
 	       << " (unsupported), replaced by getOperand(0) TODO:==========\n";
-        constExp->dump();
-        errs() << "=========================================================\n";
-	
+	constExp->dump();
+	errs() << "=========================================================\n";
+
 	return getConstant(dyn_cast<Constant>(constExp->getOperand(0)));
       case Instruction::GetElementPtr:
-        return getConstantGEPExpression(constExp);
-      case Instruction::BitCast: 
+	return getConstantGEPExpression(constExp);
+      case Instruction::BitCast:
 	//<result> = bitcast <ty> <value> to <ty2> ; yields ty2
       case Instruction::PtrToInt:
       case Instruction::IntToPtr:
-        return getConstant(dyn_cast<Constant>(constExp->getOperand(0)));
+	return getConstant(dyn_cast<Constant>(constExp->getOperand(0)));
       }
   }
 
@@ -170,19 +169,19 @@ std::string PTXWriter::getConstant(const Constant *CPV, int dept = 0)
     APInt Int;
     switch (typeID)
     {
-      case Type::IntegerTyID: 
-	Int = cast<ConstantInt>(CPV)->getValue(); 
+      case Type::IntegerTyID:
+	Int = cast<ConstantInt>(CPV)->getValue();
 	break;
       case Type::FloatTyID:
-      case Type::DoubleTyID: 
-	Int = cast<ConstantFP>(CPV)->getValueAPF().bitcastToAPInt(); 
+      case Type::DoubleTyID:
+	Int = cast<ConstantFP>(CPV)->getValueAPF().bitcastToAPInt();
 	break;
       default:
 
 	CPV->dump();
 	errs() << "typeID " << typeID << " " << CPV << "\n";
-	//	return "XXXX";
-	//	assert(false && typeID && "not implemented"); 
+	//        return "XXXX";
+	//        assert(false && typeID && "not implemented");
     }
     bool wrote = false;
     unsigned int bitwidth = Int.getBitWidth();
@@ -191,7 +190,7 @@ std::string PTXWriter::getConstant(const Constant *CPV, int dept = 0)
     for(unsigned int i=0; i<bitwidth; i+=8)
     {
       if(wrote)
-        Out << ", ";
+	Out << ", ";
       wrote = true;
       Out << Int.getLoBits(i+8).getHiBits(bitwidth-i).getZExtValue();
     }
@@ -249,7 +248,7 @@ std::string PTXWriter::getConstant(const Constant *CPV, int dept = 0)
 	  const VectorType *vecTy = cast<VectorType>(CPV->getType());
 	  elTy = vecTy->getElementType();
 	}
-	else // structs and array are only allowed during initialisation, 
+	else // structs and array are only allowed during initialisation,
 	     // we represent them with 8 byte unsigned
 	{
 	  elTy = Type::getInt8Ty(CPV->getContext());
@@ -261,14 +260,14 @@ std::string PTXWriter::getConstant(const Constant *CPV, int dept = 0)
 	Out << "{ ";
 	bool printed = false;
 	for (unsigned i = 0; i < size; i += elementSize)
-        {
+	{
 	  if(printed)
 	    Out << ",";
 	  if(i%32==0 && i!=0)
 	    Out << "\n       ";
 
 	  Out << getConstant(Constant::getNullValue(elTy));
-	  //	  Out << '0';
+	  //          Out << '0';
 	  printed = true;
 	}
 	Out << " }";
@@ -298,8 +297,8 @@ std::string PTXWriter::getConstant(const Constant *CPV, int dept = 0)
     case Type::OpaqueTyID:
       assert(false && "Opaque type id not implemented");
     default:
-      errs() << "======================= type not implemented: " 
-	     << *CPV->getType() 
+      errs() << "======================= type not implemented: "
+	     << *CPV->getType()
 	     << " | " << CPV->getType()->getTypeID() << "\n";
       CPV->dump();
       assert(false && "type not implemented");
@@ -335,7 +334,7 @@ std::string PTXWriter::getValueName(const Value *Operand) {
   std::string VarName;
 
   Name = Operand->getName();
-  
+
   if (Name.empty()) { // Assign unique names to local temporaries.
     unsigned &No = AnonValueNumbers[Operand];
     if (No == 0)
@@ -345,11 +344,11 @@ std::string PTXWriter::getValueName(const Value *Operand) {
 
 
   VarName.reserve(Name.capacity());
-  
+
   for (std::string::iterator I = Name.begin(), E = Name.end();
        I != E; ++I) {
     char ch = *I;
-    
+
     if (!((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
 	  (ch >= '0' && ch <= '9') || ch == '_')) {
       char buffer[5];
@@ -440,44 +439,44 @@ bool PTXWriter::doInitialization(Module &M) {
     Out << "\n// Global Variable Declarations\n";
 
     for (Module::global_iterator I = M.global_begin(), E = M.global_end();
-         I != E; ++I)
+	 I != E; ++I)
     {
 
       if (!I->isDeclaration())
       {
-        // Ignore special globals, such as debug info.
-        if (getGlobalVariableClass(I))
-          continue;
+	// Ignore special globals, such as debug info.
+	if (getGlobalVariableClass(I))
+	  continue;
 
-        //dont print special registers
+	//dont print special registers
 	if(isSpecialRegister(I))
 	  continue;
 
 	// .const/.global ...?
 	Out << getAddressSpace(I);
 
-        //print Type
-        const Type* Ty = I->getType()->getElementType();
-        Out << getTypeStr(Ty, false);
+	//print Type
+	const Type* Ty = I->getType()->getElementType();
+	Out << getTypeStr(Ty, false);
 
 	//value name
 	Out << ' ' << getValueName(I);
 
-	// write dimension if array or struct 
+	// write dimension if array or struct
 	// (structs are represented with b8 arrays)
 	if(isa<ArrayType>(Ty) || isa<StructType>(Ty))
-          Out << '[' << getTypeByteSize(Ty) << ']';
+	  Out << '[' << getTypeByteSize(Ty) << ']';
 
- 	//initialisation
-	if(I->getInitializer() 
-	   && getValueName(I).find(PTX_TEX)==std::string::npos 
+	//initialisation
+	if(I->getInitializer()
+	   && getValueName(I).find(PTX_TEX)==std::string::npos
 	   && getValueName(I).find(PTX_SHARED)==std::string::npos)
-	{ 
+	{
 	  Out << " =\n"
 	      << getOperandStr(I->getInitializer());
 	}
 
-	//print type as comment  
+	//print type as comment
 	Out << "; // ";
 	I->getType()->getElementType()->print(Out);
 	Out << "\n";
@@ -493,7 +492,7 @@ bool PTXWriter::doInitialization(Module &M) {
   return false;
 }
 
-void PTXWriter::printFunctionArguments(const Function *F, bool Prototype, 
+void PTXWriter::printFunctionArguments(const Function *F, bool Prototype,
 				       bool entryFunction)
 {
   const AttrListPtr &PAL = F->getAttributes();
@@ -511,40 +510,40 @@ void PTXWriter::printFunctionArguments(const Function *F, bool Prototype,
       std::string ArgName = "";
       for (; I != E; ++I)
       {
-        ArgName = " ";
-        if (PrintedArg)
-          Out << ",\n         ";
-        if (I->hasName() || !Prototype)
-          ArgName.append(getValueName(I));
-        else
-        {
-          assert(false && "no name for argument");
-          ArgName = " ";
-        }
+	ArgName = " ";
+	if (PrintedArg)
+	  Out << ",\n         ";
+	if (I->hasName() || !Prototype)
+	  ArgName.append(getValueName(I));
+	else
+	{
+	  assert(false && "no name for argument");
+	  ArgName = " ";
+	}
 
-        if(entryFunction) 
-	  // append _par suffix to name, because load from .par to 
-	  // final variableis nessesary
-          ArgName.append("_par");
+	if(entryFunction)
+	  // append _par suffix to name, because load from .par to final
+	  // variable is nessesary
+	  ArgName.append("_par");
 
-        const Type *ArgTy = I->getType();
-         if (PAL.paramHasAttr(Idx, Attribute::ByVal)) {
+	const Type *ArgTy = I->getType();
+	 if (PAL.paramHasAttr(Idx, Attribute::ByVal)) {
 	   assert(isa<PointerType>(ArgTy));
 	   ArgTy = cast<PointerType>(ArgTy)->getElementType();
 	   errs() << "WARNING: encountered by val argument!!!!!!!!\n";
-	   //	              assert(false && "whats this? ajdh");
-         }   //TODO: test
+	   //                      assert(false && "whats this? ajdh");
+	 }   //TODO: test
 
-        //add space prefix
-        if(entryFunction)
-          Out << ".param ";
-        else
-          Out << ".reg ";
+	//add space prefix
+	if(entryFunction)
+	  Out << ".param ";
+	else
+	  Out << ".reg ";
 
 	//print type and name
-        Out << getTypeStr(ArgTy,false) << ArgName;
-        PrintedArg = true;
-        ++Idx;
+	Out << getTypeStr(ArgTy,false) << ArgName;
+	PrintedArg = true;
+	++Idx;
       }
       Out << ')';
     }
@@ -610,11 +609,9 @@ void PTXWriter::loadEntryFunctionParams(const Function *F)
 
 void PTXWriter::printFunction(Function &F)
 {
-  //HACK TODO:
-  if(getValueName(&F).find("ptx_sreg")!=std::string::npos)
-    return; //somehow the compiler constructs this function
-  //  if(getValueName(&F).find("inner_shade")==std::string::npos) 
-  //   return; //only generate code for shade fun
+  // Don't bother with static constructors, PTX doesn't support them anyway.
+  if(F.getName().startswith("_GLOBAL__"))
+    return;
 
   //assume that every device function is inlined => only "__global__" functions
   if(isEntryFunction(&F))
@@ -658,7 +655,7 @@ void PTXWriter::printFunction(Function &F)
 
 	  if(types_constant_printed[key]<op)
 	  {
-	    for(int op_iter=types_constant_printed[key]+1; op_iter<=op; 
+	    for(int op_iter=types_constant_printed[key]+1; op_iter<=op;
 		op_iter++)
 	      defineRegister(getTmpValueName(Ty,op_iter),Ty,&*I,false);
 	    types_constant_printed[key] = op;
@@ -697,7 +694,7 @@ void PTXWriter::printBasicBlock(BasicBlock *BB)
       // const Type *Ty = II->getOperand(op)->getType();
       bool isSignedop = isSignedOperand(*II,op);
       if(isa<Constant>(II->getOperand(op)) && !allowsConstantOperator(&*II,op))
-        moveConstantOperators(&*II, op, isSignedop);
+	moveConstantOperators(&*II, op, isSignedop);
     }
 
     //print instruction
@@ -714,8 +711,8 @@ void PTXWriter::visitReturnInst(ReturnInst &I)
   {
     Out << "  mov"
 	<< getTypeStr(I.getOperand(0)->getType())
-	<< " llvm_ptx__returnreg, " 
-	<< getOperandStr(I.getOperand(0)) 
+	<< " llvm_ptx__returnreg, "
+	<< getOperandStr(I.getOperand(0))
 	<< ";    //move return value\n";
   }
 
@@ -727,9 +724,9 @@ void PTXWriter::visitReturnInst(ReturnInst &I)
 }
 
 void PTXWriter::printPHICopiesForSuccessor (BasicBlock *CurBlock,
-                                          BasicBlock *Successor,
-                                          Value* predicate,
-                                          bool negated)
+					  BasicBlock *Successor,
+					  Value* predicate,
+					  bool negated)
 {
   for (BasicBlock::iterator I = Successor->begin(); isa<PHINode>(I); ++I)
   {
@@ -752,7 +749,7 @@ void PTXWriter::printPHICopiesForSuccessor (BasicBlock *CurBlock,
 }
 
 void PTXWriter::printBranchToBlock(BasicBlock *CurBB, BasicBlock *Succ,
-                                   std::string predicate)
+				   std::string predicate)
 {
   //not direct successor => goto TODO: gives strange errors, bug in ptx?!?!
 //  if (next(Function::iterator(CurBB)) != Function::iterator(Succ))
@@ -771,15 +768,15 @@ void PTXWriter::visitBranchInst(BranchInst &I) {
   if (I.isConditional())   //implemented with predicates
   {
     //first successor
-    printPHICopiesForSuccessor (I.getParent(), I.getSuccessor(0), 
+    printPHICopiesForSuccessor (I.getParent(), I.getSuccessor(0),
 				I.getCondition(), false);
-    printBranchToBlock(I.getParent(), I.getSuccessor(0), 
+    printBranchToBlock(I.getParent(), I.getSuccessor(0),
 		       getPredicate(I.getCondition(),false));
 
     //second successor
-    printPHICopiesForSuccessor (I.getParent(), I.getSuccessor(1), 
+    printPHICopiesForSuccessor (I.getParent(), I.getSuccessor(1),
 				I.getCondition(), true);
-    printBranchToBlock(I.getParent(), I.getSuccessor(1), 
+    printBranchToBlock(I.getParent(), I.getSuccessor(1),
 		       getPredicate(I.getCondition(),true));
     return;
   }
@@ -851,7 +848,7 @@ void PTXWriter::visitBinaryOperator(Instruction &I) {
   switch (I.getOpcode())
   {
     case Instruction::Shl:
-//      assert(getTypeBitSize(I.getType())==32 
+//      assert(getTypeBitSize(I.getType())==32
 //      && "shift left destination register must be of size 32 bit");
     case Instruction::And:
     case Instruction::Or:
@@ -860,7 +857,7 @@ void PTXWriter::visitBinaryOperator(Instruction &I) {
       if(getTypeBitSize(Ty)==1)
 	Out << ".pred";
       else
-	Out << ".b" << getTypeBitSize(Ty); 
+	Out << ".b" << getTypeBitSize(Ty);
       break;
     default:
       Out << getTypeStr(Ty, isSigned);
@@ -941,15 +938,15 @@ void PTXWriter::visitCastInst(CastInst &I)
   //bitcast instr.
   if(isa<BitCastInst>(I))
   {
-    Out << "  mov" 
+    Out << "  mov"
 	<< ".b" << getTypeBitSize(DstTy)
-      //	<< getTypeStr(DstTy, isSignedDst)
- 	<< " "
-	<< getValueName(&I) << ", " 
-	<< getSignedConstOperand(&I,0) 
-	<< ";//bitcast " << getTypeStr(DstTy, isSignedDst) 
-	                 << getTypeStr(SrcTy, isSignedDst)
-	<< "\n"; 
+      //        << getTypeStr(DstTy, isSignedDst)
+	<< " "
+	<< getValueName(&I) << ", "
+	<< getSignedConstOperand(&I,0)
+	<< ";//bitcast " << getTypeStr(DstTy, isSignedDst)
+			 << getTypeStr(SrcTy, isSignedDst)
+	<< "\n";
     return;
   }
 
@@ -966,9 +963,9 @@ void PTXWriter::visitCastInst(CastInst &I)
     Out << "  selp"
 	<< getTypeStr(DstTy, isSignedSrc)
 	<< " " << getValueName(&I)
-        << ", 1, 0, "
-        << getSignedConstOperand(&I,0)
-        << "; // select for cast expression \n";
+	<< ", 1, 0, "
+	<< getSignedConstOperand(&I,0)
+	<< "; // select for cast expression \n";
 //    errs() << "ERROR: Need to implement source predicate conversion!!!?\n";
     return;
   }
@@ -979,7 +976,7 @@ void PTXWriter::visitCastInst(CastInst &I)
   //set rounding mode
   if(DstTy->isIntegerTy() && SrcTy->isFloatingPointTy())
     Out << ".rzi";
-  else if((DstTy->isFloatingPointTy() && SrcTy->isIntegerTy()) 
+  else if((DstTy->isFloatingPointTy() && SrcTy->isIntegerTy())
 	  || isa<FPTruncInst>(I))
     Out << ".rn"; // TODO: What to do??? Not dokumented in LLVM
 
@@ -997,22 +994,22 @@ void PTXWriter::visitSelectInst(SelectInst &I)
   if(I.getType()->getPrimitiveSizeInBits()==1)
   {
     //predicate is true => first operand
-    Out << " @" << getSignedConstOperand(&I, 0) 
+    Out << " @" << getSignedConstOperand(&I, 0)
 	<< " mov"
 	<< getTypeStr(I.getType())
-	<< ' ' << getValueName(&I) 
+	<< ' ' << getValueName(&I)
 	<< " ," << getSignedConstOperand(&I, 1) << ";\n";
 
     //else second
-    Out << "@!" << getSignedConstOperand(&I, 0) 
+    Out << "@!" << getSignedConstOperand(&I, 0)
 	<< " mov"
 	<< getTypeStr(I.getType())
-	<< ' ' << getValueName(&I) 
-        << ", " << getSignedConstOperand(&I, 2) << ";\n";
+	<< ' ' << getValueName(&I)
+	<< ", " << getSignedConstOperand(&I, 2) << ";\n";
 
     Out << "//for old instruction: ";
   }
-  
+
   Out << "  selp"
       << getTypeStr(I.getType())
       << ' ' << getValueName(&I) << ", " //destination
@@ -1084,46 +1081,46 @@ void PTXWriter::visitCallInst(CallInst &I) {
 const unsigned int myintr_floor = Intrinsic::num_intrinsics+1;
 const unsigned int myintr_sqrt = Intrinsic::num_intrinsics+2;
 
-//   <result> = [tail] call [cconv] [ret attrs] <ty> [<fnty>*] 
+//   <result> = [tail] call [cconv] [ret attrs] <ty> [<fnty>*]
 //              <fnptrval>(<function args>) [fn attrs]
 bool PTXWriter::visitBuiltinCall(CallInst &I,
-                               bool &WroteCallee)
+			       bool &WroteCallee)
 {
   Function* F = I.getCalledFunction();
   std::string name = F->getName();
-  
+
   //texture fetch?
   if(name.find(PTX_TEX)!=std::string::npos)
   {
     //determine dimension
     int dimension = 0;
-    if(name.find("__ptx_tex1D")!=std::string::npos) 
+    if(name.find("__ptx_tex1D")!=std::string::npos)
       dimension = 1;
-    else if(name.find("__ptx_tex2D")!=std::string::npos) 
+    else if(name.find("__ptx_tex2D")!=std::string::npos)
       dimension = 2;
-    else if(name.find("__ptx_tex3D")!=std::string::npos) 
+    else if(name.find("__ptx_tex3D")!=std::string::npos)
       dimension = 3;
     else
        assert(false && "strange texture fetch!!!");
 
     //determine type of ptr
-    const Type *Ty = 
+    const Type *Ty =
       cast<PointerType>(I.getOperand(1)->getType())->getElementType();
-    
+
     bool isSigned = true; //integers are always signed, see ptx-isa
 
     //print instruction with type
-    Out << "  tex." 
+    Out << "  tex."
 	<< dimension << "d" //1d,2d or 3d
-        << ".v4" //always v4, see ptx isa
+	<< ".v4" //always v4, see ptx isa
 	<< getTypeStr(Ty, isSigned) //dest and src type is the same (u32 or f32)
 	<< getTypeStr(Ty, isSigned);
-    
+
     //print operands
     Out << ' ' << getValueName(&I) << ", ["
-        << getOperandStr(I.getOperand(1))
+	<< getOperandStr(I.getOperand(1))
 	<< ", "
-        << getSignedConstOperand(&I, 2)
+	<< getSignedConstOperand(&I, 2)
 	<< "];\n";
     return true;
   }
@@ -1142,17 +1139,17 @@ bool PTXWriter::visitBuiltinCall(CallInst &I,
 	<< "    .reg.b32 __ptx_tmp_halffloatC;\n"
 	<< "    mov.b32 __ptx_tmp_halffloatC, "
 	<< "    __ptx_tmp_halffloatB;\n";
-      //	<< getSignedConstOperand(&I,1) << ";\n";
-    
+      //        << getSignedConstOperand(&I,1) << ";\n";
+
     //write conversion instruction
-    const Type *DstTy = I.getType();    
+    const Type *DstTy = I.getType();
     Out << "    cvt" //convert instruction
 	<< getTypeStr(DstTy) //dest type
 	<< ".f16" //source type
 	<< ' '  << getValueName(&I)
 	<< ", __ptx_tmp_halffloatC;}\n";
-      //	<< ", " << getSignedConstOperand(&I,1) << ";\n";
-    
+      //        << ", " << getSignedConstOperand(&I,1) << ";\n";
+
     return true;
   }
 
@@ -1202,7 +1199,7 @@ bool PTXWriter::visitBuiltinCall(CallInst &I,
     case Intrinsic::sqrt: Out << "sqrt.approx"; break;
     case Intrinsic::sin: Out << "sin.approx"; break;
     case Intrinsic::cos: Out << "cos.approx"; break;
-    case myintr_floor: 
+    case myintr_floor:
       //TODO: if previous instruction is mul,add... move rounding to that inst.?
       Out << "cvt.rmi" << getTypeStr(I.getType());
       break;
@@ -1212,7 +1209,7 @@ bool PTXWriter::visitBuiltinCall(CallInst &I,
     // operands
     Out << getTypeStr(I.getType())
 	<< ' ' << getValueName(&I) << ", "
-        << getSignedConstOperand(&I, 1) //source
+	<< getSignedConstOperand(&I, 1) //source
 	<< ";\n";
     return true;
   }
@@ -1235,11 +1232,11 @@ void PTXWriter::visitAllocaInst(AllocaInst &I)
   // prin array def.
   Out << "  " << getAddressSpace(&I)
       << getTypeStr(Ty)
-      << ' ' << getValueName(&I) << "_def" 
+      << ' ' << getValueName(&I) << "_def"
       << '[' << size << "];    // get local space for struct or array\n";
 
   // move adress to reg. //TODO use existing visitMovInstruction???!!
-  Out << "  mov.u32 " << getValueName(&I) << ", " 
+  Out << "  mov.u32 " << getValueName(&I) << ", "
       << getValueName(&I) << "_def; // move adress to register\n";
 }
 
@@ -1247,9 +1244,9 @@ std::string PTXWriter::getConstantGEPExpression(const User *GEP)
 {
   //calculate constant offset
   unsigned int offset = 0;
-  const CompositeType* CompTy = 
+  const CompositeType* CompTy =
     cast<CompositeType>(GEP->getOperand(0)->getType());
-  
+
   for(unsigned op_i=1; op_i<GEP->getNumOperands(); op_i++)
   {
     //get size of alle element types whiche are before the selected field
@@ -1285,15 +1282,20 @@ void PTXWriter::visitLoadInst(LoadInst &I)
   {
     Out << "  mov"
 	<< getTypeStr(I.getType())
-	<< ' ' << getValueName(&I) << ", " 
+	<< ' ' << getValueName(&I) << ", "
 	<< getSpecialRegisterName(I.getOperand(0)) << ";\n";
   }
-  else 
+  else
   {
     //print instruction and type
     Out << "  ld"
-	<< getAddressSpace(I.getOperand(0))
-	<< getTypeStr(I.getType());
+	<< getAddressSpace(I.getOperand(0));
+
+    // 8-bit loads use 16-bit registers so they are handled seperately.
+    if(I.getType()->isIntegerTy(8))
+      Out << ".u8";
+    else
+      Out << getTypeStr(I.getType());
 
     //print operands
     Out << ' ' << getValueName(&I) << ", [" //destination
@@ -1305,9 +1307,15 @@ void PTXWriter::visitLoadInst(LoadInst &I)
 void PTXWriter::visitStoreInst(StoreInst &I)
 {
   Out << "  st"
-      << getAddressSpace(I.getOperand(1))
-      << getTypeStr(I.getOperand(0)->getType())
-      << " ["
+      << getAddressSpace(I.getOperand(1));
+
+  // 8-bit stores use 16-bit registers so they are handled seperately.
+  if(I.getType()->isIntegerTy(8))
+    Out << ".u8";
+  else
+    Out << getTypeStr(I.getOperand(0)->getType());
+
+  Out << " ["
       << getOperandStr(I.getOperand(1)) //destination
       << "], "
       << getSignedConstOperand(&I, 0)
@@ -1315,9 +1323,9 @@ void PTXWriter::visitStoreInst(StoreInst &I)
 }
 
 //extract element from vector
-void PTXWriter::visitExtractElementInst(ExtractElementInst &I) 
+void PTXWriter::visitExtractElementInst(ExtractElementInst &I)
 {
-  const Type *EltTy = 
+  const Type *EltTy =
     cast<VectorType>(I.getOperand(0)->getType())->getElementType();
 
   Out << "  mov"
@@ -1338,7 +1346,7 @@ void PTXWriter::visitExtractElementInst(ExtractElementInst &I)
 
 void PTXWriter::visitGetElementPtrInst(GetElementPtrInst &I)
 {
-  assert(false 
+  assert(false
    && "WARNING: Ignoring GEP instruction, should be deleted beforehand!====\n");
 }
 
@@ -1381,8 +1389,8 @@ void PTXWriter::printStructReturnPointerFunctionType(formatted_raw_ostream &Out,
 //===----------------------------------------------------------------------===//
 
 bool PTXTargetMachine::addPassesToEmitWholeFile(PassManager &PM,
-                                              formatted_raw_ostream &o,
-                                              CodeGenFileType fileType,
+					      formatted_raw_ostream &o,
+					      CodeGenFileType fileType,
 					      CodeGenOpt::Level OptLevel,
 						bool DisableVerify) {
   if (fileType != TargetMachine::CGFT_AssemblyFile) return true;
@@ -1390,7 +1398,7 @@ bool PTXTargetMachine::addPassesToEmitWholeFile(PassManager &PM,
   std::map<const Value *, const Value *>* parentCompositePointer = new std::map<const Value *, const Value *>;
 
 
-  
+
 
     // Propagate constants at call sites into the functions they call.  This
     // opens opportunities for globalopt (and inlining) by substituting function
@@ -1412,12 +1420,13 @@ bool PTXTargetMachine::addPassesToEmitWholeFile(PassManager &PM,
     // function pointers.  When this happens, we often have to resolve varargs
     // calls, etc, so let instcombine do this.
     PM.add(createInstructionCombiningPass());
- 
-    //PM.add(createFunctionInliningPass()); 
+
+    //PM.add(createFunctionInliningPass());
        // Inline small functions //->assertion "invalid LLVM intrinsic name"
 
-    //PM.add(createPruneEHPass());            
+    //PM.add(createPruneEHPass());
        // Remove dead EH info   //->assertion "invalid LLVM intrinsic name"
+
     PM.add(createGlobalOptimizerPass());    // Optimize globals again.
     PM.add(createGlobalDCEPass());          // Remove dead functions
 
@@ -1432,7 +1441,6 @@ bool PTXTargetMachine::addPassesToEmitWholeFile(PassManager &PM,
 
     // Run a few AA driven optimizations here and now, to cleanup the code.
     //   PM.add(createGlobalsModRefPass());      // IP alias analysis
-
     PM.add(createLICMPass());               // Hoist loop invariants
     PM.add(createGVNPass());                  // Remove redundancies
     PM.add(createMemCpyOptPass());          // Remove dead memcpy's
@@ -1449,6 +1457,7 @@ bool PTXTargetMachine::addPassesToEmitWholeFile(PassManager &PM,
 
     // Now that we have optimized the program, discard unreachable functions...
     PM.add(createGlobalDCEPass());
+
   /*
    PM.add(createInstructionCombiningPass());
     PM.add(createJumpThreadingPass());        // Thread jumps.
@@ -1473,30 +1482,28 @@ bool PTXTargetMachine::addPassesToEmitWholeFile(PassManager &PM,
     PM.add(createReassociatePass());
     PM.add(createGVNPass());
     PM.add(createCFGSimplificationPass());
-    PM.add(createAggressiveDCEPass()); 
+    PM.add(createAggressiveDCEPass());
       //fpm.add(createDeadCodeEliminationPass());
 */
 
-
-  
   //do everything possible on registers
   PM.add(createPromoteMemoryToRegisterPass());
   PM.add(new PTXBackendInsertSpecialInstructions(*parentCompositePointer));
 
-  // algebraic simplification (needed after GEP replacement) 
+  // algebraic simplification (needed after GEP replacement)
   // but also destrois GEP replacement :/
-  //  PM.add(createInstructionCombiningPass()); 
-  
+  //  PM.add(createInstructionCombiningPass());
+
   //commutative simplification (simplify GEP calculations)
-  PM.add(createReassociatePass()); 
-  // simplify constants generated by GEP replacement 
+  PM.add(createReassociatePass());
+  // simplify constants generated by GEP replacement
   // REMOVED: makes global + constant as a constant expression => error
-  PM.add(createConstantPropagationPass()); 
+  PM.add(createConstantPropagationPass());
   PM.add(createDeadInstEliminationPass()); // remove simplified instructions
   PM.add(createStripDeadPrototypesPass()); // remove unused functions like exp
   PM.add(createLowerSwitchPass());
   PM.add(createPromoteMemoryToRegisterPass());
-  
+
 //   PM.add(createGCLoweringPass());
 //   PM.add(createLowerAllocationsPass(true));
 //   PM.add(createLowerInvokePass());

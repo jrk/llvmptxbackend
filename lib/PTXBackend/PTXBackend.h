@@ -68,7 +68,7 @@
 #include <iostream>
 
 #include "PTXPasses.h"
- 
+
 using namespace llvm;
 
 
@@ -107,10 +107,10 @@ using namespace llvm;
     static char ID;
     static unsigned int POINTER_SIZE;
 
-    explicit PTXWriter(formatted_raw_ostream &o, std::map<const Value *, 
-		       const Value *>& parentCompositePointer)
+    explicit PTXWriter(formatted_raw_ostream &o, std::map<const Value *,
+                       const Value *>& parentCompositePointer)
       : FunctionPass(&ID), Out(o), IL(0), Mang(0), LI(0),
-        TheModule(0), TAsm(0), TD(0), parentPointers(parentCompositePointer), 
+        TheModule(0), TAsm(0), TD(0), parentPointers(parentCompositePointer),
         NextAnonValueNumber(0)
     {
       FPCounter = 0;
@@ -136,7 +136,12 @@ using namespace llvm;
       // Free memory...
       delete IL;
       delete TD;
+      delete TAsm;
+      delete TCtx;
       delete Mang;
+
+      // Ugly hack to avoid leaking memory
+      delete &parentPointers;
 //       FPConstantMap.clear();
 //       TypeNames.clear();
 //       ByValParams.clear();
@@ -145,12 +150,12 @@ using namespace llvm;
     }
 
     std::string getTypeStr(const Type *Ty,
-			bool isSigned = false,
-			bool IgnoreName = false,
-			const AttrListPtr &PAL = AttrListPtr());
+                        bool isSigned = false,
+                        bool IgnoreName = false,
+                        const AttrListPtr &PAL = AttrListPtr());
     std::string getSimpleTypeStr(const Type *Ty,
-			      bool isSigned);
-    
+                              bool isSigned);
+
     void printStructReturnPointerFunctionType(formatted_raw_ostream &Out,
                                               const AttrListPtr &PAL,
                                               const PointerType *Ty);
@@ -168,63 +173,63 @@ using namespace llvm;
       case Type::VectorTyID:
       {
         const VectorType* VecTy = cast<VectorType>(Ty);
-        return VecTy->getNumElements() 
-	  * getTypeBitSize(VecTy->getElementType());
+        return VecTy->getNumElements()
+          * getTypeBitSize(VecTy->getElementType());
       }
 //        case Type::ArrayTyID:
 //       {
 //         const ArrayType* ArrTy = cast<ArrayType>(Ty);
-//         unsigned int size = ArrTy->getNumElements() 
+//         unsigned int size = ArrTy->getNumElements()
 //                        * getTypeBitSize(ArrTy->getElementType());
 //       }
 //       case Type::StructTyID:
 //       {
-// 	const StructType* StrTy = cast<StructType>(Ty);
-// 	unsigned int size = 0;
-// 	for(unsigned int subtype=0; subtype < StrTy->getNumElements(); 
+//        const StructType* StrTy = cast<StructType>(Ty);
+//        unsigned int size = 0;
+//        for(unsigned int subtype=0; subtype < StrTy->getNumElements();
 //                  subtype++)
-// 	{
-// 	  const Type* elementType = StrTy->getElementType(subtype);
-// 	  unsigned int align = getAlignmentByte(elementType);
-// 	  size += 8 * getPadding(size*8, align);
-// 	  size += getTypeBitSize(elementType);
-// 	}
-// 	return size;
+//        {
+//          const Type* elementType = StrTy->getElementType(subtype);
+//          unsigned int align = getAlignmentByte(elementType);
+//          size += 8 * getPadding(size*8, align);
+//          size += getTypeBitSize(elementType);
+//        }
+//        return size;
 //       }
       case Type::ArrayTyID:
       {
         const ArrayType* ArrTy = cast<ArrayType>(Ty);
- 	const Type* elementType = ArrTy->getElementType();
+        const Type* elementType = ArrTy->getElementType();
         unsigned int size_element = getTypeBitSize(elementType);
         unsigned int size = ArrTy->getNumElements() * size_element;
         unsigned int align = 8 * getAlignmentByte(elementType);
-	/*
-	if(size == 0)
-	  ArrTy->dump();
+        /*
+        if(size == 0)
+          ArrTy->dump();
         assert(size!=0 && "no multiple of 8");
-	*/
+        */
 
-        size += (ArrTy->getNumElements()-1) * getPadding(size_element, align); 
-	//-1 because the last element needs no "fillup"
+        size += (ArrTy->getNumElements()-1) * getPadding(size_element, align);
+        //-1 because the last element needs no "fillup"
         return size;
       }
       case Type::StructTyID:
       {
-	const StructType* StrTy = cast<StructType>(Ty);
-	unsigned int size = 0;
-	for(unsigned int subtype=0; subtype < StrTy->getNumElements(); 
-	    subtype++)
-	{
-	  const Type* elementType = StrTy->getElementType(subtype);
-	  unsigned int align = 8 * getAlignmentByte(elementType);
-	  size += getPadding(size, align);
-	  size += getTypeBitSize(elementType);
-	}
-	return size;
+        const StructType* StrTy = cast<StructType>(Ty);
+        unsigned int size = 0;
+        for(unsigned int subtype=0; subtype < StrTy->getNumElements();
+            subtype++)
+        {
+          const Type* elementType = StrTy->getElementType(subtype);
+          unsigned int align = 8 * getAlignmentByte(elementType);
+          size += getPadding(size, align);
+          size += getTypeBitSize(elementType);
+        }
+        return size;
       }
       default:
-	errs() << "Unknown type" <<  *Ty << "\n";
-	abort();
+        errs() << "Unknown type" <<  *Ty << "\n";
+        abort();
       }
     }
 
@@ -241,24 +246,24 @@ using namespace llvm;
 
       switch (Ty->getTypeID()) {
       case Type::VoidTyID:    assert(false && "void type?????");
-      case Type::VectorTyID:  
-	assert(false && "alignment of vector type????? TODO");
+      case Type::VectorTyID:
+        return getAlignmentByte(cast<VectorType>(Ty)->getElementType());
       case Type::PointerTyID:
       case Type::IntegerTyID:
       case Type::FloatTyID:
       case Type::DoubleTyID:
-	return getTypeBitSize(Ty)/8;
+        return getTypeBitSize(Ty)/8;
       case Type::ArrayTyID:
         return getAlignmentByte(cast<ArrayType>(Ty)->getElementType());
       case Type::StructTyID:
       {
         const StructType* StrTy = cast<StructType>(Ty);
         unsigned int maxa = 0;
-        for(unsigned int subtype=0; subtype < StrTy->getNumElements(); 
-	    subtype++)
+        for(unsigned int subtype=0; subtype < StrTy->getNumElements();
+            subtype++)
         {
           maxa = std::max(getAlignmentByte(StrTy->getElementType(subtype)),
-			  maxa);
+                          maxa);
           if(maxa==MAX_ALIGN)
             return maxa;
         }
@@ -273,7 +278,7 @@ using namespace llvm;
     static unsigned int getPadding(unsigned int offset, unsigned int align)
     {
       //second % needed if offset == 0
-      return (align - (offset % align)) % align; 
+      return (align - (offset % align)) % align;
     }
 
     std::string getSignedConstOperand(Instruction *Operand, unsigned int op);
@@ -284,23 +289,23 @@ using namespace llvm;
     {
       std::stringstream name_tmp;
       name_tmp << "ptx_tmp"
-	       << getTypeStr(Ty)
-	       << '_' << index;
+               << getTypeStr(Ty)
+               << '_' << index;
       std::string name = name_tmp.str();
 
       while(name.find(".") !=std::string::npos)
-	name.replace(name.find("."),1,"_");
+        name.replace(name.find("."),1,"_");
       return name;
     }
 
     bool hasSignedOperand(Instruction &I)
     {
-	for(unsigned int op=0; op < I.getNumOperands(); op++)
-	{
-	  if(isSignedOperand(I,op))
-		return true;
-	}
-	return false;
+        for(unsigned int op=0; op < I.getNumOperands(); op++)
+        {
+          if(isSignedOperand(I,op))
+                return true;
+        }
+        return false;
     }
 
     //returns number of signed operands
@@ -312,7 +317,7 @@ using namespace llvm;
           return false;
 
         case Instruction::SDiv:
-	  //        case Instruction::LShr: logical shift => zero extension
+          //        case Instruction::LShr: logical shift => zero extension
         case Instruction::AShr: //arithmetic shift => sign extension
         case Instruction::SRem:
           return op_number<2;
@@ -345,11 +350,11 @@ using namespace llvm;
       {
         const Type* Ty = I->getOperand(op)->getType();
         Out << "  mov"
-	    << getTypeStr(Ty, isSigned)
+            << getTypeStr(Ty, isSigned)
         // Out << ' ' << getTmpValueName(Ty,isSigned,op) << ", ";
-	    << ' ' << getTmpValueName(Ty,op) << ", "
-	    << getOperandStr(I->getOperand(op))
-	    << ";\n";
+            << ' ' << getTmpValueName(Ty,op) << ", "
+            << getOperandStr(I->getOperand(op))
+            << ";\n";
       }
     }
 
@@ -364,8 +369,8 @@ using namespace llvm;
 
     void printFunction(Function &);
     void printEntryFunctionSignature(const Function *F, bool Prototype);
-    void printFunctionArguments(const Function *F, bool Prototype, 
-				bool entryFunction);
+    void printFunctionArguments(const Function *F, bool Prototype,
+                                bool entryFunction);
     void loadEntryFunctionParams(const Function *F);
     void printBasicBlock(BasicBlock *BB);
 
@@ -464,31 +469,31 @@ using namespace llvm;
     {
       int opcode = v->getOpcode();
 
-      bool allowed = isa<PHINode>(v) 
-	|| isa<ReturnInst>(v) 
-	|| isa<AllocaInst>(v)
-	|| isa<LoadInst>(v)
+      bool allowed = isa<PHINode>(v)
+        || isa<ReturnInst>(v)
+        || isa<AllocaInst>(v)
+        || isa<LoadInst>(v)
 
-	//shift amount can be constant!
-	|| ((opcode == Instruction::Shl 
-	     || opcode == Instruction::LShr 
-	     || opcode == Instruction::AShr) 
-	    && op == 1)
-	// store <ty> <value>, <ty>* <pointer>[, align <alignment>]
-	|| (op == 1 && isa<StoreInst>(v)) 
-	// <result> = [tail] call [cconv] [ret attrs] <ty> [<fnty>*] 
-	//            <fnptrval>(<function args>) [fn attrs]
-	|| (op == 0 && isa<CallInst>(v))
-	// wrapper for global variables
-	|| (isa<CallInst>(v) 
-	    && v->getOperand(0)->getName().str().compare("constWrapper")==0) 
-	//<result> = extractelement <n x <ty>> <val>, i32 <idx>    ; yields <ty>
-	|| (op == 1 && isa<ExtractElementInst>(v)) 
-	//texture access
-	|| (op == 1 && isa<CallInst>(v)
-      	    && cast<CallInst>(v)->getCalledFunction()->getName().find(PTX_TEX)
-	       != std::string::npos); // base addr. of texture fetch
- 	
+        //shift amount can be constant!
+        || ((opcode == Instruction::Shl
+             || opcode == Instruction::LShr
+             || opcode == Instruction::AShr)
+            && op == 1)
+        // store <ty> <value>, <ty>* <pointer>[, align <alignment>]
+        || (op == 1 && isa<StoreInst>(v))
+        // <result> = [tail] call [cconv] [ret attrs] <ty> [<fnty>*]
+        //            <fnptrval>(<function args>) [fn attrs]
+        || (op == 0 && isa<CallInst>(v))
+        // wrapper for global variables
+        || (isa<CallInst>(v)
+            && v->getOperand(0)->getName().str().compare("constWrapper")==0)
+        //<result> = extractelement <n x <ty>> <val>, i32 <idx>    ; yields <ty>
+        || (op == 1 && isa<ExtractElementInst>(v))
+        //texture access
+        || (op == 1 && isa<CallInst>(v)
+            && cast<CallInst>(v)->getCalledFunction()->getName().find(PTX_TEX)
+               != std::string::npos); // base addr. of texture fetch
+
       return allowed;
 
       //TODO: allow constants in binary operatory why not working???
@@ -519,14 +524,14 @@ using namespace llvm;
       }
     }
 
-    void defineRegister(std::string name, const Type *Ty, Value *v, 
-			bool isSigned = false)
+    void defineRegister(std::string name, const Type *Ty, Value *v,
+                        bool isSigned = false)
     {
       Out << "  .reg ";
       if(isa<CmpInst>(v) && Ty->getPrimitiveSizeInBits()==1) //predicate?!
-	Out << ".pred";
+        Out << ".pred";
       else
-	Out << getTypeStr(Ty,isSigned);
+        Out << getTypeStr(Ty,isSigned);
       Out << ' ' << name << ";\n";
     }
 
@@ -534,59 +539,38 @@ using namespace llvm;
     {
       // no users and no return type => entry func
       return (F->use_begin() == F->use_end()
-         && F->getReturnType()->getTypeID() == Type::VoidTyID); 
-      
+         && F->getReturnType()->getTypeID() == Type::VoidTyID);
+
     }
 
     const Value* getParentPointer(const Value* ptr)
     {
       if(parentPointers.find(ptr)!=parentPointers.end())
-	return parentPointers.find(ptr)->second;
+        return parentPointers.find(ptr)->second;
       else // no parent pointer => this is a parent
-	return ptr;
+        return ptr;
     }
 
     //determines adress space from underlying object name
     std::string getAddressSpace(const Value *v)
     {
-      // getUnderlyingObject resolves normal GEP instructions and casts, 
-      // getParentPointer resolves "replaced"(by add/mul inst.) GEP instr. 
+      // getUnderlyingObject resolves normal GEP instructions and casts,
+      // getParentPointer resolves "replaced"(by add/mul inst.) GEP instr.
       //TODO: do iteratively till result is stable??
-      const Value* parent = 
-	getParentPointer(getParentPointer(v)->getUnderlyingObject());  
+      const Value* parent =
+        getParentPointer(getParentPointer(v)->getUnderlyingObject());
 
       //allocated data is stored in local memory
       if(isa<AllocaInst>(parent))
         return ".local";
-      //      else if(getValueName(parent).find("llvm_ptx_this")==0)
-      //	return ".local";
       else if(getValueName(parent).find(PTX_CONST)!=std::string::npos)
-	return ".const";
+        return ".const";
       else if(getValueName(parent).find(PTX_SHARED)!=std::string::npos)
-	return ".shared";
+        return ".shared";
       else if(getValueName(parent).find(PTX_TEX)!=std::string::npos)
-	return ".tex";
+        return ".tex";
 
-      //propagate to parants of unary operators like casts
-      //      if(v->getNumOperands()==1)
-      //	return getAddressSpace(v->getOperand(0));
-	 
       return ".global";
-
-
-      //special global variables
-      if(const GlobalVariable *GV = dyn_cast<GlobalVariable>(v))
-      {
-        if(GV->isConstant())
-          return ".const";
-        else if(GV->isThreadLocal())
-          return ".local";
-        else
-          return ".global";
-      }
-
-      //put everything else to global
-      return ".local";
     }
 
     bool isSpecialRegister(const Value *v)
@@ -599,32 +583,32 @@ using namespace llvm;
     {
       std::string sourceName = getValueName(v);
       if(!sourceName.find("__ptx_sreg_") == 0)// != std::string::npos)
-	assert(false && "this is not an special register!");
+        assert(false && "this is not an special register!");
 
       std::string sregName;
       //determine type
       if(sourceName.find("_tid_") != std::string::npos)
-	sregName = "%tid.";
+        sregName = "%tid.";
       else if(sourceName.find("_ntid_") != std::string::npos)
-	sregName = "%ntid.";
+        sregName = "%ntid.";
       else if(sourceName.find("_ctaid_") != std::string::npos)
-	sregName = "%ctaid.";
+        sregName = "%ctaid.";
       else if(sourceName.find("_nctaid_") != std::string::npos)
-	sregName = "%nctaid.";
+        sregName = "%nctaid.";
       else if(sourceName.find("_gridid") != std::string::npos)
-	return "%gridid";
+        return "%gridid";
       else if(sourceName.find("_clock") != std::string::npos)
-	return "%clock";
+        return "%clock";
       else
-	assert(false && "not implemented");
+        assert(false && "not implemented");
 
       //get x,y,z
       if(sourceName.find("id_x") != std::string::npos)
-	sregName += 'x';
+        sregName += 'x';
       else if(sourceName.find("id_y") != std::string::npos)
-	sregName += 'y';
+        sregName += 'y';
       else if(sourceName.find("id_z") != std::string::npos)
-	sregName += 'z';
+        sregName += 'z';
 
       return sregName;
     }
@@ -645,12 +629,12 @@ using namespace llvm;
 
     bool isGotoCodeNecessary(BasicBlock *From, BasicBlock *To);
     void printPHICopiesForSuccessor(BasicBlock *CurBlock,
-                                    BasicBlock *Successor, 
-				    Value* predicate = 0, bool = false);
+                                    BasicBlock *Successor,
+                                    Value* predicate = 0, bool = false);
     void printBranchToBlock(BasicBlock *CurBlock, BasicBlock *SuccBlock,
                             std::string predicate = "");
-    void printGEPExpressionStep(GetElementPtrInst &Ptr, 
-				const CompositeType *CompTy,
+    void printGEPExpressionStep(GetElementPtrInst &Ptr,
+                                const CompositeType *CompTy,
                                 unsigned int operand, bool usedGepReg);
     std::string getConstantGEPExpression(const User *Ptr);
 

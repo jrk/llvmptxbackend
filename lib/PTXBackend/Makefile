@@ -7,11 +7,11 @@
 #
 ##===----------------------------------------------------------------------===##
 
-LEVEL = ../../..
-LIBRARYNAME = LLVMPTXBackend
+LEVEL = ../..
+LIBRARYNAME = PTXBackend
+BUILD_RELINKED=1
+SHARED_LIBRARY=1
 
-DIRS = TargetInfo
+CFlags += -fPIC
 
 include $(LEVEL)/Makefile.common
-
-CompileCommonOpts += -Wno-format

@@ -89,7 +89,7 @@ class PTXBackendInsertSpecialInstructions : public BasicBlockPass
   static char ID;
 
  PTXBackendInsertSpecialInstructions(std::map<const Value *, const Value *>& 
-				     parentCompositePointer)
+                                     parentCompositePointer)
    : BasicBlockPass(&ID),parentPointers(parentCompositePointer) {}
 
   void getAnalysisUsage(AnalysisUsage &AU) const {
@@ -123,19 +123,19 @@ class PTXBackendInsertSpecialInstructions : public BasicBlockPass
 
     iplist<Instruction>::iterator I = BB.getInstList().begin();
     for (iplist<Instruction>::iterator nextI = I,
-	   E = --BB.getInstList().end(); I != E; I = nextI)
+           E = --BB.getInstList().end(); I != E; I = nextI)
       {
-	iplist<Instruction>::iterator I = nextI++;
+        iplist<Instruction>::iterator I = nextI++;
 
-	// check for special functions implemented in ptx
-	if(CallInst* call = dyn_cast<CallInst>(&*I))
-	  changedBlock = (replaceSpecialFunctionsWithPTXInstr(call) 
-			  || changedBlock);
+        // check for special functions implemented in ptx
+        if(CallInst* call = dyn_cast<CallInst>(&*I))
+          changedBlock = (replaceSpecialFunctionsWithPTXInstr(call) 
+                          || changedBlock);
 
-	// simplify GEP instructions wit mul,add etc. to the trivial calse 
-	// (GEP (pointer, constant offset))
-	else if(GetElementPtrInst* gep = dyn_cast<GetElementPtrInst>(&*I))
-	  changedBlock = (simplifyGEPInstructions(gep) || changedBlock);
+        // simplify GEP instructions wit mul,add etc. to the trivial calse 
+        // (GEP (pointer, constant offset))
+        else if(GetElementPtrInst* gep = dyn_cast<GetElementPtrInst>(&*I))
+          changedBlock = (simplifyGEPInstructions(gep) || changedBlock);
       }
     return changedBlock;
   }
@@ -170,20 +170,20 @@ class PTXPolishBeforeCodegenPass : public BasicBlockPass
 
     iplist<Instruction>::iterator I = BB.getInstList().begin();
     for (iplist<Instruction>::iterator nextI = I,
-	   E = --BB.getInstList().end(); I != E; I = nextI)
+           E = --BB.getInstList().end(); I != E; I = nextI)
       {
-	iplist<Instruction>::iterator I = nextI++;
+        iplist<Instruction>::iterator I = nextI++;
 
-	// check for wrapperfunctions
-	if(CallInst* callI = dyn_cast<CallInst>(&*I))
-	  if(I->getOperand(0)->getName().str().compare(CONSTWRAPPERNAME)==0)
-	{
-	  //replace function call result with its parameter
-	  callI->replaceAllUsesWith(callI->getOperand(1)); 
-	  callI->dropAllReferences();
-	  callI->removeFromParent();
-	  changedBlock = true;
-	}
+        // check for wrapperfunctions
+        if(CallInst* callI = dyn_cast<CallInst>(&*I))
+          if(I->getOperand(0)->getName().str().compare(CONSTWRAPPERNAME)==0)
+        {
+          //replace function call result with its parameter
+          callI->replaceAllUsesWith(callI->getOperand(1)); 
+          callI->dropAllReferences();
+          callI->removeFromParent();
+          changedBlock = true;
+        }
       }
     return changedBlock;
   }

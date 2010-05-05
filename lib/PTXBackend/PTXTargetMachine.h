@@ -35,7 +35,7 @@ struct PTXTargetMachine : public TargetMachine {
   //  const TargetData DataLayout;       // Calculates type size & alignment
 
   PTXTargetMachine(const Target &T, const std::string &TT, 
-		   const std::string &FS)
+                   const std::string &FS)
     : TargetMachine(T) {}
 
   //const Module &M, const std::string &FS)
@@ -43,10 +43,10 @@ struct PTXTargetMachine : public TargetMachine {
 
   virtual bool WantsWholeFile() const { return true; }
   virtual bool addPassesToEmitWholeFile(PassManager &PM, 
-					formatted_raw_ostream &Out,
+                                        formatted_raw_ostream &Out,
                                         CodeGenFileType FileType, 
-					CodeGenOpt::Level OptLevel,
-					bool DisableVerify);
+                                        CodeGenOpt::Level OptLevel,
+                                        bool DisableVerify);
 
   // This class always works, but shouldn't be the default in most cases.
   //static unsigned getModuleMatchQuality(const Module &M) { return 1; }

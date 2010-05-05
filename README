@@ -13,48 +13,30 @@ LLVM_SRC_ROOT       (eg, /home/pprabhu/llvm/llvm/)
 LLVM_OBJ_DIR        (eg, /home/pprabhu/llvm/llvm-objects/)
 LLVM_INSTALL_DIR    (eg, /home/pprabhu/llvm/llvm-install/)
 
-set up our additional Liberty specific include directory (using the absolute path):
+set up any include directory (using the absolute path):
 
-export LIBERTY_INCLUDE_DIR=/home/pprabhu/svn/trunk/liberty/src/llvm-liberty/include/
+export INCLUDE_DIR=/home/pprabhu/llvmptxbackend/include
 
 (2) Configure the build system:
 
-~/svn/trunk/liberty/src/llvm-liberty$ ./configure --with-llvmsrc=$LLVM_SRC_ROOT \
-                                                  --with-llvmobj=$LLVM_OBJ_DIR \
-                                                  --prefix=$LLVM_INSTALL_DIR \
-                                                  --exec-prefix=$LLVM_INSTALL_DIR \
-                                                  --includedir=$LIBERTY_INCLUDE_DIR 
+~/llvmptxbackend$ ./configure --with-llvmsrc=$LLVM_SRC_ROOT \
+                              --with-llvmobj=$LLVM_OBJ_DIR \
+                              --prefix=$LLVM_INSTALL_DIR \
+                              --exec-prefix=$LLVM_INSTALL_DIR \
+                              --includedir=$INCLUDE_DIR
 
-(3) Create a new directory for any new set of passes you want to add within the lib
+(3) Run make to build all the shared objects:
+
+~/llvmptxbackend$ make
+
+(4) To test the backend try:
+
+~/llvmptxbackend$ echo "int main() { return 42; }" | \
+                  clang -x c - -emit-llvm -c -o - | \
+                  llc -load ./Debug/lib/libPTXBackend.so -march=ptx
+
+(5) Create a new directory for any new set of passes you want to add within the lib
 directory, create .cpp files within that directory while the include directory has 
 Liberty-specific .h files required by the .cpp files
-
-(4) Once you have created a new pass within that directory, you can build it and test
-it out as follows: Taking the example of -irreducible (which tests whether a function is 
-irreducible or not):
-
-pprabhu@pprabhu-desktop:~/svn/trunk/liberty/src/llvm-liberty/lib/Irreducibility$ make
-
-llvm[0]: Compiling IntervalRegionGraph.cpp for Debug build  (PIC)
-llvm[0]: Compiling IrreducibiltyRemover.cpp for Debug build  (PIC)
-llvm[0]: Compiling IrreducibiltyTester.cpp for Debug build  (PIC)
-llvm[0]: Linking Debug Shared Library Irreducibility.so
-llvm[0]: Linking Debug Object Library Irreducibility.o
-
-pprabhu@pprabhu-desktop:~/svn/trunk/liberty/src/llvm-liberty/lib/Irreducibility$ make install 
-
-pprabhu@pprabhu-desktop:~/llvm/llvm-install/lib$ ls libIrreducibility.so -lh
-lrwxrwxrwx 1 pprabhu liberators 26 2008-09-04 18:40 libIrreducibility.so -> libIrreducibility.so.0.0.0*
-
-pprabhu@pprabhu-desktop:~/llvm/llvm-play$ opt -stats -load ~/llvm/llvm-install/lib/libIrreducibility.so -irreducible < main.bc
-===-------------------------------------------------------------------------===
-                          ... Statistics Collected ...
-===-------------------------------------------------------------------------===
-
-3  - Number of functions
-2  - Number of functions with irreducible control flow graphs
-
-
-
 
 Written by Prakash, 4th Sep 2008.

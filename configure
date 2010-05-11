@@ -1605,6 +1605,23 @@ fi
 
 
 
+# Check whether --with-llvmsrc was given.
+if test "${with_llvmsrc+set}" = set; then
+  withval=$with_llvmsrc; llvm_src="$withval"
+else
+  llvm_src="$LLVM_SRC_ROOT"
+fi
+
+  LLVM_SRC=$llvm_src
+
+
+# Check whether --with-llvmobj was given.
+if test "${with_llvmobj+set}" = set; then
+  withval=$with_llvmobj; llvm_obj="$withval"
+else
+  llvm_obj="$LLVM_OBJ_ROOT"
+fi
+
 
 
 
@@ -1627,7 +1644,7 @@ ac_compiler_gnu=$ac_cv_c_compiler_gnu
 
 
 ac_aux_dir=
-for ac_dir in $LLVM_SRC_ROOT/autoconf "$srcdir"/$LLVM_SRC_ROOT/autoconf; do
+for ac_dir in "$llvm_src"/autoconf "$srcdir/$llvm_src"/autoconf; do
   if test -f "$ac_dir/install-sh"; then
     ac_aux_dir=$ac_dir
     ac_install_sh="$ac_aux_dir/install-sh -c"
@@ -1643,8 +1660,8 @@ for ac_dir in $LLVM_SRC_ROOT/autoconf "$srcdir"/$LLVM_SRC_ROOT/autoconf; do
   fi
 done
 if test -z "$ac_aux_dir"; then
-  { { echo "$as_me:$LINENO: error: cannot find install-sh or install.sh in $LLVM_SRC_ROOT/autoconf \"$srcdir\"/$LLVM_SRC_ROOT/autoconf" >&5
-echo "$as_me: error: cannot find install-sh or install.sh in $LLVM_SRC_ROOT/autoconf \"$srcdir\"/$LLVM_SRC_ROOT/autoconf" >&2;}
+  { { echo "$as_me:$LINENO: error: cannot find install-sh or install.sh in $llvm_src/autoconf \"$srcdir\"/$llvm_src/autoconf" >&5
+echo "$as_me: error: cannot find install-sh or install.sh in $llvm_src/autoconf \"$srcdir\"/$llvm_src/autoconf" >&2;}
    { (exit 1); exit 1; }; }
 fi
 
@@ -1658,23 +1675,6 @@ ac_configure="$SHELL $ac_aux_dir/configure"  # Please don't use this var.
 
 
 
-
-# Check whether --with-llvmsrc was given.
-if test "${with_llvmsrc+set}" = set; then
-  withval=$with_llvmsrc; llvm_src="$withval"
-else
-  llvm_src="$LLVM_SRC_ROOT"
-fi
-
-  LLVM_SRC=$llvm_src
-
-
-# Check whether --with-llvmobj was given.
-if test "${with_llvmobj+set}" = set; then
-  withval=$with_llvmobj; llvm_obj="$withval"
-else
-  llvm_obj="$LLVM_OBJ_ROOT"
-fi
 
   LLVM_OBJ=$llvm_obj
 

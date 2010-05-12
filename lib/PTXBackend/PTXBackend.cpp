@@ -1109,19 +1109,44 @@ bool PTXWriter::visitBuiltinCall(CallInst &I,
 
     bool isSigned = true; //integers are always signed, see ptx-isa
 
-    //print instruction with type
-    Out << "  tex."
-	<< dimension << "d" //1d,2d or 3d
-	<< ".v4" //always v4, see ptx isa
-	<< getTypeStr(Ty, isSigned) //dest and src type is the same (u32 or f32)
-	<< getTypeStr(Ty, isSigned);
-
+    //print texture lookup
+    Out << "  {\n";
+    
+    //print dummy register definitions
+    for(int i=0; i<4-dimension; i++)
+    {
+      defineRegister("__ptx_tex_dummy"+utostr(i), Ty, &I);
+      Out << "    mov.f32 __ptx_tex_dummy"+utostr(i)
+	  << ", 0f00000000;\n";
+    }
+    
+    //texture lookup
+    Out << "    tex." 
+        << dimension << "d" //1d,2d or 3d
+        << ".v4" //always v4, see ptx isa
+        << getTypeStr(Ty, isSigned) //dest and src type is the same (u32 or f32)
+        << getTypeStr(Ty, isSigned);
+    
     //print operands
     Out << ' ' << getValueName(&I) << ", ["
-	<< getOperandStr(I.getOperand(1))
-	<< ", "
-	<< getSignedConstOperand(&I, 2)
-	<< "];\n";
+        << getOperandStr(I.getOperand(1))
+        << ", {";
+    for(int i=0; i<4; i++) //index per dimension(vector)
+    {
+      if(i<dimension)
+        Out << getSignedConstOperand(&I, 2+i);
+      else //rest needs to be filled by dummies
+        Out << "__ptx_tex_dummy"+utostr(i-dimension);
+      if(i<3) //fuer U.
+        Out << ", ";
+    }
+    Out << "}];}\n";
+    return true;
+  }
+  //Synchronize 
+  else if(name.find("__syncthreads")!=std::string::npos)
+  {
+    Out << "  bar.sync 0;\n"; //TODO: bar nr
     return true;
   }
   //convert half float to double (half floats are loaded as short)

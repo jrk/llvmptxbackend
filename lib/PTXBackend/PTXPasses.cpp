@@ -30,7 +30,7 @@
 #define LOG2_E_REC 0.6931471806
 
 bool PTXBackendInsertSpecialInstructions::replaceSpecialFunctionsWithPTXInstr(
-                                                              CallInst* callI)
+							      CallInst* callI)
 {
   Function* F = callI->getCalledFunction();
 
@@ -47,12 +47,12 @@ bool PTXBackendInsertSpecialInstructions::replaceSpecialFunctionsWithPTXInstr(
   if(intrinsicID == Intrinsic::exp || F->getName() == "expf")
     {
       Constant* lg2EConst =
-        ConstantFP::get(Type::getPrimitiveType(callI->getContext(),
-                                               Type::FloatTyID),LOG2_E);
+	ConstantFP::get(Type::getPrimitiveType(callI->getContext(),
+					       Type::FloatTyID),LOG2_E);
 
       BinaryOperator* MulInst =
-        BinaryOperator::Create(Instruction::Mul, callI->getOperand(1),
-                               lg2EConst, "", callI);
+	BinaryOperator::Create(Instruction::Mul, callI->getOperand(1),
+			       lg2EConst, "", callI);
       callI->setOperand(0,ex2Fun);  // set function call do exp2
       callI->setOperand(1,MulInst); // set source to our calculated tmp value
       return true;
@@ -62,11 +62,11 @@ bool PTXBackendInsertSpecialInstructions::replaceSpecialFunctionsWithPTXInstr(
     {
       callI->setOperand(0,lg2Fun); //convert log to lg2 function call
       Constant* lg2EConst =
-        ConstantFP::get(Type::getPrimitiveType(callI->getContext(),
-                                               Type::FloatTyID),LOG2_E_REC);
+	ConstantFP::get(Type::getPrimitiveType(callI->getContext(),
+					       Type::FloatTyID),LOG2_E_REC);
 
       BinaryOperator* MulInst =
-        BinaryOperator::Create(Instruction::Mul, callI, lg2EConst);
+	BinaryOperator::Create(Instruction::Mul, callI, lg2EConst);
       MulInst->insertAfter(callI);
       // replace uses of CallI with our new result fron FDiv
       callI->replaceAllUsesWith(MulInst);
@@ -81,11 +81,11 @@ bool PTXBackendInsertSpecialInstructions::replaceSpecialFunctionsWithPTXInstr(
     {
       // create and insert instructions
       CallInst* callLg2 =
-        CallInst::Create(lg2Fun, callI->getOperand(1)); //log2(a)
+	CallInst::Create(lg2Fun, callI->getOperand(1)); //log2(a)
       callLg2->insertBefore(callI);
       BinaryOperator* MulInst =
-        BinaryOperator::Create(Instruction::Mul,
-                               callI->getOperand(2), callLg2); //x * log2(a)
+	BinaryOperator::Create(Instruction::Mul,
+			       callI->getOperand(2), callLg2); //x * log2(a)
 
       MulInst->insertBefore(callI);
       CallInst* callEx2 = CallInst::Create(ex2Fun, MulInst); // ex2(x * lg2(a))
@@ -119,7 +119,7 @@ bool PTXBackendInsertSpecialInstructions::replaceSpecialFunctionsWithPTXInstr(
       CallInst* callCos = CallInst::Create(cosFun,callI->getOperand(1));
       callCos->insertAfter(callSin);
       BinaryOperator* DivInst =
-        BinaryOperator::Create(Instruction::FDiv, callSin, callCos);
+	BinaryOperator::Create(Instruction::FDiv, callSin, callCos);
 
       DivInst->insertAfter(callCos);
       callI->replaceAllUsesWith(DivInst);
@@ -135,12 +135,17 @@ bool PTXBackendInsertSpecialInstructions::replaceSpecialFunctionsWithPTXInstr(
       CallInst* callCos = CallInst::Create(cosFun,callI->getOperand(1));
       callCos->insertAfter(callSin);
       BinaryOperator* DivInst =
-        BinaryOperator::Create(Instruction::FDiv, callCos, callSin);
+	BinaryOperator::Create(Instruction::FDiv, callCos, callSin);
       DivInst->insertAfter(callCos);
       callI->replaceAllUsesWith(DivInst);
       //reset operand 0 to sin call (it got replaced by "replaceAllUsesWith()"
       DivInst->setOperand(1,callSin);
       return true;
+    }
+  else if(F->getName() == "llvm.dbg.value")
+    {
+      callI->dropAllReferences();
+      callI->removeFromParent();
     }
 
   return false;
@@ -148,7 +153,7 @@ bool PTXBackendInsertSpecialInstructions::replaceSpecialFunctionsWithPTXInstr(
 
 
 bool PTXBackendInsertSpecialInstructions::simplifyGEPInstructions(
-                                       GetElementPtrInst* GEPInst)
+				       GetElementPtrInst* GEPInst)
 {
   Value* parentPointer = GEPInst->getOperand(0);
   const Value* topParent = parentPointer;
@@ -159,8 +164,8 @@ bool PTXBackendInsertSpecialInstructions::simplifyGEPInstructions(
   {
     Function *constWrapper =
       Function::Create(FunctionType::get(parentPointer->getType(),true),
-                       GlobalValue::ExternalLinkage,
-                       Twine(CONSTWRAPPERNAME));
+		       GlobalValue::ExternalLinkage,
+		       Twine(CONSTWRAPPERNAME));
 
     std::vector<Value*> params;
     params.push_back(parentPointer);
@@ -173,9 +178,9 @@ bool PTXBackendInsertSpecialInstructions::simplifyGEPInstructions(
 
   Value* currentAddrInst =
     new PtrToIntInst(parentPointer,
-                     IntegerType::get(GEPInst->getContext(),
-                                      PTXWriter::POINTER_SIZE),
-                     "", GEPInst);
+		     IntegerType::get(GEPInst->getContext(),
+				      PTXWriter::POINTER_SIZE),
+		     "", GEPInst);
 
   unsigned int constantOffset = 0;
 
@@ -189,15 +194,15 @@ bool PTXBackendInsertSpecialInstructions::simplifyGEPInstructions(
       TypeIndex = ConstOP->getZExtValue();
       for(unsigned int ty_i=0; ty_i<TypeIndex; ty_i++)
       {
-        const Type* elementType = CompTy->getTypeAtIndex(ty_i);
-        unsigned int align = PTXWriter::getAlignmentByte(elementType);
-        offset += PTXWriter::getPadding(offset, align);
-        offset += PTXWriter::getTypeByteSize(elementType);
+	const Type* elementType = CompTy->getTypeAtIndex(ty_i);
+	unsigned int align = PTXWriter::getAlignmentByte(elementType);
+	offset += PTXWriter::getPadding(offset, align);
+	offset += PTXWriter::getTypeByteSize(elementType);
       }
 
       //add padding for accessed type
       unsigned int align =
-        PTXWriter::getAlignmentByte(CompTy->getTypeAtIndex(TypeIndex));
+	PTXWriter::getAlignmentByte(CompTy->getTypeAtIndex(TypeIndex));
       offset += PTXWriter::getPadding(offset, align);
 
       constantOffset += offset;
@@ -223,30 +228,30 @@ bool PTXBackendInsertSpecialInstructions::simplifyGEPInstructions(
       size += PTXWriter::getPadding(size, align);
 
       Constant* newConstSize =
-        ConstantInt::get(IntegerType::get(GEPInst->getContext(),
-                                          PTXWriter::POINTER_SIZE),
-                         size);
+	ConstantInt::get(IntegerType::get(GEPInst->getContext(),
+					  PTXWriter::POINTER_SIZE),
+			 size);
 
       Value *operand = GEPInst->getOperand(op);
 
       //HACK TODO: Inserted by type replacement.. this code could break something????
       if(PTXWriter::getTypeByteSize(operand->getType())>4)
       {
-        //trunctate
-        operand =
-          new TruncInst(operand,
-                        IntegerType::get(GEPInst->getContext(),
-                                         PTXWriter::POINTER_SIZE),
-                        "", GEPInst);
+	//trunctate
+	operand =
+	  new TruncInst(operand,
+			IntegerType::get(GEPInst->getContext(),
+					 PTXWriter::POINTER_SIZE),
+			"", GEPInst);
       }
 
       BinaryOperator* tmpMul =
-        BinaryOperator::Create(Instruction::Mul, newConstSize, operand,
-                               "", GEPInst);
+	BinaryOperator::Create(Instruction::Mul, newConstSize, operand,
+			       "", GEPInst);
       currentAddrInst =
-        BinaryOperator::Create(Instruction::Add, currentAddrInst, tmpMul,
-                               "", GEPInst);
-        }
+	BinaryOperator::Create(Instruction::Add, currentAddrInst, tmpMul,
+			       "", GEPInst);
+	}
 
       //step down in type hirachy
       CompTy = dyn_cast<CompositeType>(CompTy->getTypeAtIndex(TypeIndex));
@@ -255,11 +260,11 @@ bool PTXBackendInsertSpecialInstructions::simplifyGEPInstructions(
   //insert addition of new offset before GEPInst
   Constant* newConstOffset =
     ConstantInt::get(IntegerType::get(GEPInst->getContext(),
-                                      PTXWriter::POINTER_SIZE),
-                     constantOffset);
+				      PTXWriter::POINTER_SIZE),
+		     constantOffset);
   currentAddrInst =
     BinaryOperator::Create(Instruction::Add, currentAddrInst,
-                           newConstOffset, "", GEPInst);
+			   newConstOffset, "", GEPInst);
 
   //convert offset to ptr type (nop)
   IntToPtrInst* intToPtrInst =

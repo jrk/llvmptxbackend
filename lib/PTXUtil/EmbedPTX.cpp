@@ -6,6 +6,7 @@
 #include "llvm/PassManager.h"
 #include "llvm/ADT/Triple.h"
 #include "llvm/Analysis/Verifier.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/raw_ostream.h"
@@ -18,6 +19,9 @@
 
 using namespace llvm;
 
+static cl::opt<bool> PTXDebug("print-ptx", cl::init(false), cl::Hidden,
+			      cl::desc("Print ptx"));
+
 static TargetMachine *getPTXTarget(const Module *mod) {
 
   const std::string MArch = "ptx";
@@ -25,7 +29,7 @@ static TargetMachine *getPTXTarget(const Module *mod) {
   // Search for the ptx backend
   const Target *TheTarget = 0;
   for (TargetRegistry::iterator it = TargetRegistry::begin(),
-         ie = TargetRegistry::end(); it != ie; ++it) {
+	 ie = TargetRegistry::end(); it != ie; ++it) {
     if (MArch == it->getName()) {
       TheTarget = &*it;
       break;
@@ -72,15 +76,18 @@ namespace liberty {
     // Flush the string stream, otherwise we won't see anything
     Out.flush();
 
+    if(PTXDebug)
+      errs() << AssemblyCode;
+
     // Embed the assembly code as constant strings
     Constant* AssemblyCodeArray =
       ConstantArray::get(cpuMod.getContext(), AssemblyCode);
     return new GlobalVariable(cpuMod,
-                              AssemblyCodeArray->getType(),
-                              true,
-                              GlobalValue::PrivateLinkage,
-                              AssemblyCodeArray,
-                              "");
+			      AssemblyCodeArray->getType(),
+			      true,
+			      GlobalValue::PrivateLinkage,
+			      AssemblyCodeArray,
+			      "");
   }
 }
 

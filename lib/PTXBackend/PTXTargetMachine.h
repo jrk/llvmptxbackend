@@ -34,23 +34,23 @@ namespace llvm {
 struct PTXTargetMachine : public TargetMachine {
   //  const TargetData DataLayout;       // Calculates type size & alignment
 
-  PTXTargetMachine(const Target &T, const std::string &TT, 
-                   const std::string &FS)
+  PTXTargetMachine(const Target &T, const std::string &TT,
+		   const std::string &FS)
     : TargetMachine(T) {}
 
   //const Module &M, const std::string &FS)
   //  : DataLayout(&M) {}
 
   virtual bool WantsWholeFile() const { return true; }
-  virtual bool addPassesToEmitWholeFile(PassManager &PM, 
-                                        formatted_raw_ostream &Out,
-                                        CodeGenFileType FileType, 
-                                        CodeGenOpt::Level OptLevel,
-                                        bool DisableVerify);
+  virtual bool addPassesToEmitFile(PassManagerBase &PM,
+				   formatted_raw_ostream &Out,
+				   CodeGenFileType FileType,
+				   CodeGenOpt::Level OptLevel,
+				   bool DisableVerify);
 
   // This class always works, but shouldn't be the default in most cases.
   //static unsigned getModuleMatchQuality(const Module &M) { return 1; }
-  
+
   virtual const TargetData *getTargetData() const { return 0; }
 };
 

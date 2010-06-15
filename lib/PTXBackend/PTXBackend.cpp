@@ -138,8 +138,15 @@ std::string PTXWriter::getConstant(const Constant *CPV, int dept = 0)
 {
   // undef value is allowed to have an arbitrary value, here 0.
   // TODO: better solution eg. any used register?
-  if(isa<UndefValue>(CPV))
-    return "0"; //TODO what about undef structs,floats...??
+  if(isa<UndefValue>(CPV)) {
+    const Type *type = CPV->getType();
+    if(type->isDoubleTy() || type->isFloatTy())
+      return "0.0";
+    else if(type->isIntegerTy())
+      return "0";
+    else
+      assert(false && "TODO what about undef structs,floats...??");
+  }
 
   if(const ConstantExpr* constExp = dyn_cast<ConstantExpr>(CPV))
   {
@@ -417,7 +424,7 @@ bool PTXWriter::doInitialization(Module &M) {
 
   //print ptx version and target
   Out << ".version 1.4\n";
-  Out << ".target sm_10, map_f64_to_f32\n\n";
+  Out << ".target sm_13\n\n";
 
   // Initialize
   TheModule = &M;
@@ -472,7 +479,7 @@ bool PTXWriter::doInitialization(Module &M) {
 	   && getValueName(I).find(PTX_TEX)==std::string::npos
 	   && getValueName(I).find(PTX_SHARED)==std::string::npos)
 	{
-	  Out << " =\n"
+	  Out << " = "
 	      << getOperandStr(I->getInitializer());
 	}
 
@@ -841,8 +848,13 @@ void PTXWriter::visitBinaryOperator(Instruction &I) {
   }
 
   //div of floats need approx
-  else if(I.getOpcode()==Instruction::FDiv)
+  else if(I.getOpcode()==Instruction::FDiv) {
+    if(I.getType()->isFloatTy()) {
       Out << ".approx";
+    } else {
+      Out << ".rn";
+    }
+  }
 
   //print type
   switch (I.getOpcode())
@@ -1111,7 +1123,7 @@ bool PTXWriter::visitBuiltinCall(CallInst &I,
 
     //print texture lookup
     Out << "  {\n";
-    
+
     //print dummy register definitions
     for(int i=0; i<4-dimension; i++)
     {
@@ -1119,31 +1131,31 @@ bool PTXWriter::visitBuiltinCall(CallInst &I,
       Out << "    mov.f32 __ptx_tex_dummy"+utostr(i)
 	  << ", 0f00000000;\n";
     }
-    
+
     //texture lookup
-    Out << "    tex." 
-        << dimension << "d" //1d,2d or 3d
-        << ".v4" //always v4, see ptx isa
-        << getTypeStr(Ty, isSigned) //dest and src type is the same (u32 or f32)
-        << getTypeStr(Ty, isSigned);
-    
+    Out << "    tex."
+	<< dimension << "d" //1d,2d or 3d
+	<< ".v4" //always v4, see ptx isa
+	<< getTypeStr(Ty, isSigned) //dest and src type is the same (u32 or f32)
+	<< getTypeStr(Ty, isSigned);
+
     //print operands
     Out << ' ' << getValueName(&I) << ", ["
-        << getOperandStr(I.getOperand(1))
-        << ", {";
+	<< getOperandStr(I.getOperand(1))
+	<< ", {";
     for(int i=0; i<4; i++) //index per dimension(vector)
     {
       if(i<dimension)
-        Out << getSignedConstOperand(&I, 2+i);
+	Out << getSignedConstOperand(&I, 2+i);
       else //rest needs to be filled by dummies
-        Out << "__ptx_tex_dummy"+utostr(i-dimension);
+	Out << "__ptx_tex_dummy"+utostr(i-dimension);
       if(i<3) //fuer U.
-        Out << ", ";
+	Out << ", ";
     }
     Out << "}];}\n";
     return true;
   }
-  //Synchronize 
+  //Synchronize
   else if(name.find("__syncthreads")!=std::string::npos)
   {
     Out << "  bar.sync 0;\n"; //TODO: bar nr
@@ -1186,7 +1198,7 @@ bool PTXWriter::visitBuiltinCall(CallInst &I,
   {
     if(name == "floorf")
       ID = myintr_floor;
-    else if(name == "sqrtf")
+    else if(name == "sqrtf" || name == "sqrt")
       ID = Intrinsic::sqrt;
     else if(name == "exp2f")
       ID = Intrinsic::exp2;
@@ -1208,8 +1220,8 @@ bool PTXWriter::visitBuiltinCall(CallInst &I,
   case Intrinsic::log2:
   //case Intrinsic::rsqrt:
   {
-    if(I.getType()->getTypeID() != Type::FloatTyID)
-      // && I.getType()->getTypeID() != Type::DoubleTyID)
+    if(I.getType()->getTypeID() != Type::FloatTyID
+      && I.getType()->getTypeID() != Type::DoubleTyID)
       assert(false && "only floats");
   }
   //general instructions
@@ -1221,7 +1233,13 @@ bool PTXWriter::visitBuiltinCall(CallInst &I,
     case Intrinsic::log2: Out << "lg2.approx"; break;
     //case Intrinsic::rsqrt:  Out << "rsqrt"; break;
     case Intrinsic::exp2: Out << "ex2.approx"; break;
-    case Intrinsic::sqrt: Out << "sqrt.approx"; break;
+    case Intrinsic::sqrt:
+      if(I.getType()->isFloatTy()) {
+        Out << "sqrt.approx";
+      } else {
+        Out << "sqrt.rn";
+      }
+      break;
     case Intrinsic::sin: Out << "sin.approx"; break;
     case Intrinsic::cos: Out << "cos.approx"; break;
     case myintr_floor:
@@ -1413,11 +1431,11 @@ void PTXWriter::printStructReturnPointerFunctionType(formatted_raw_ostream &Out,
 //                       External Interface declaration
 //===----------------------------------------------------------------------===//
 
-bool PTXTargetMachine::addPassesToEmitWholeFile(PassManager &PM,
-					      formatted_raw_ostream &o,
-					      CodeGenFileType fileType,
-					      CodeGenOpt::Level OptLevel,
-						bool DisableVerify) {
+bool PTXTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
+					   formatted_raw_ostream &o,
+					   CodeGenFileType fileType,
+					   CodeGenOpt::Level OptLevel,
+					   bool DisableVerify) {
   if (fileType != TargetMachine::CGFT_AssemblyFile) return true;
 
   std::map<const Value *, const Value *>* parentCompositePointer = new std::map<const Value *, const Value *>;

@@ -51,7 +51,7 @@ bool PTXBackendInsertSpecialInstructions::replaceSpecialFunctionsWithPTXInstr(
 					       Type::FloatTyID),LOG2_E);
 
       BinaryOperator* MulInst =
-	BinaryOperator::Create(Instruction::Mul, callI->getOperand(1),
+	BinaryOperator::Create(Instruction::FMul, callI->getOperand(1),
 			       lg2EConst, "", callI);
       callI->setOperand(0,ex2Fun);  // set function call do exp2
       callI->setOperand(1,MulInst); // set source to our calculated tmp value
@@ -66,7 +66,7 @@ bool PTXBackendInsertSpecialInstructions::replaceSpecialFunctionsWithPTXInstr(
 					       Type::FloatTyID),LOG2_E_REC);
 
       BinaryOperator* MulInst =
-	BinaryOperator::Create(Instruction::Mul, callI, lg2EConst);
+	BinaryOperator::Create(Instruction::FMul, callI, lg2EConst);
       MulInst->insertAfter(callI);
       // replace uses of CallI with our new result fron FDiv
       callI->replaceAllUsesWith(MulInst);
@@ -84,7 +84,7 @@ bool PTXBackendInsertSpecialInstructions::replaceSpecialFunctionsWithPTXInstr(
 	CallInst::Create(lg2Fun, callI->getOperand(1)); //log2(a)
       callLg2->insertBefore(callI);
       BinaryOperator* MulInst =
-	BinaryOperator::Create(Instruction::Mul,
+	BinaryOperator::Create(Instruction::FMul,
 			       callI->getOperand(2), callLg2); //x * log2(a)
 
       MulInst->insertBefore(callI);

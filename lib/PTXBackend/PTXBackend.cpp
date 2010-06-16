@@ -1034,7 +1034,7 @@ void PTXWriter::visitSelectInst(SelectInst &I)
 }
 
 void PTXWriter::visitCallInst(CallInst &I) {
-  if (isa<InlineAsm>(I.getOperand(0)))
+  if (isa<InlineAsm>(I.getCalledFunction()))
     assert(false && "not implemented");//    return visitInlineAsm(I);
 
   bool WroteCallee = false;
@@ -1055,12 +1055,12 @@ void PTXWriter::visitCallInst(CallInst &I) {
 
   //arguments //TODO: does the new code work??
   bool PrintedArg = false;
-  for (unsigned int op = 1; op < I.getNumOperands(); ++op) {
+  for (unsigned int op = 0; op < I.getNumArgOperands(); ++op) {
     if (PrintedArg)
       Out << ", ";
     else
       Out << ", (";
-    Out << getSignedConstOperand(&I,op);
+    Out << getOperandStr(I.getArgOperand(op));
     PrintedArg = true;
   }
   if(PrintedArg)
@@ -1117,7 +1117,7 @@ bool PTXWriter::visitBuiltinCall(CallInst &I,
 
     //determine type of ptr
     const Type *Ty =
-      cast<PointerType>(I.getOperand(1)->getType())->getElementType();
+      cast<PointerType>(I.getArgOperand(0)->getType())->getElementType();
 
     bool isSigned = true; //integers are always signed, see ptx-isa
 
@@ -1141,7 +1141,7 @@ bool PTXWriter::visitBuiltinCall(CallInst &I,
 
     //print operands
     Out << ' ' << getValueName(&I) << ", ["
-	<< getOperandStr(I.getOperand(1))
+	<< getOperandStr(I.getArgOperand(0))
 	<< ", {";
     for(int i=0; i<4; i++) //index per dimension(vector)
     {

@@ -88,7 +88,7 @@ class PTXBackendInsertSpecialInstructions : public BasicBlockPass
  public:
   static char ID;
 
- PTXBackendInsertSpecialInstructions(std::map<const Value *, const Value *>& 
+ PTXBackendInsertSpecialInstructions(std::map<const Value *, const Value *>&
                                      parentCompositePointer)
    : BasicBlockPass(&ID),parentPointers(parentCompositePointer) {}
 
@@ -129,10 +129,10 @@ class PTXBackendInsertSpecialInstructions : public BasicBlockPass
 
         // check for special functions implemented in ptx
         if(CallInst* call = dyn_cast<CallInst>(&*I))
-          changedBlock = (replaceSpecialFunctionsWithPTXInstr(call) 
+          changedBlock = (replaceSpecialFunctionsWithPTXInstr(call)
                           || changedBlock);
 
-        // simplify GEP instructions wit mul,add etc. to the trivial calse 
+        // simplify GEP instructions wit mul,add etc. to the trivial calse
         // (GEP (pointer, constant offset))
         else if(GetElementPtrInst* gep = dyn_cast<GetElementPtrInst>(&*I))
           changedBlock = (simplifyGEPInstructions(gep) || changedBlock);
@@ -176,10 +176,10 @@ class PTXPolishBeforeCodegenPass : public BasicBlockPass
 
         // check for wrapperfunctions
         if(CallInst* callI = dyn_cast<CallInst>(&*I))
-          if(I->getOperand(0)->getName().str().compare(CONSTWRAPPERNAME)==0)
+          if(callI->getCalledFunction()->getName().str().compare(CONSTWRAPPERNAME)==0)
         {
           //replace function call result with its parameter
-          callI->replaceAllUsesWith(callI->getOperand(1)); 
+          callI->replaceAllUsesWith(callI->getArgOperand(0));
           callI->dropAllReferences();
           callI->removeFromParent();
           changedBlock = true;

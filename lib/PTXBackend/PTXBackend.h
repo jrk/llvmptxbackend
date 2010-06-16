@@ -415,7 +415,8 @@ using namespace llvm;
 
     // isInlineAsm - Check if the instruction is a call to an inline asm chunk
     static bool isInlineAsm(const Instruction& I) {
-      if (isa<CallInst>(&I) && isa<InlineAsm>(I.getOperand(0)))
+      const CallInst *call = dyn_cast<CallInst>(&I);
+      if (call && isa<InlineAsm>(call->getCalledFunction()))
         return true;
       return false;
     }
@@ -486,7 +487,7 @@ using namespace llvm;
         || (op == 0 && isa<CallInst>(v))
         // wrapper for global variables
         || (isa<CallInst>(v)
-            && v->getOperand(0)->getName().str().compare("constWrapper")==0)
+            && cast<CallInst>(v)->getCalledFunction()->getName().str().compare("constWrapper")==0)
         //<result> = extractelement <n x <ty>> <val>, i32 <idx>    ; yields <ty>
         || (op == 1 && isa<ExtractElementInst>(v))
         //texture access

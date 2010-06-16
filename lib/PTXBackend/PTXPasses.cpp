@@ -51,16 +51,16 @@ bool PTXBackendInsertSpecialInstructions::replaceSpecialFunctionsWithPTXInstr(
 					       Type::FloatTyID),LOG2_E);
 
       BinaryOperator* MulInst =
-	BinaryOperator::Create(Instruction::FMul, callI->getOperand(1),
+	BinaryOperator::Create(Instruction::FMul, callI->getArgOperand(0),
 			       lg2EConst, "", callI);
-      callI->setOperand(0,ex2Fun);  // set function call do exp2
+      callI->setCalledFunction(ex2Fun);  // set function call do exp2
       callI->setOperand(1,MulInst); // set source to our calculated tmp value
       return true;
     }
   //log(x) = lg2(x) * (1/lg2(e))
   else if(intrinsicID == Intrinsic::log || F->getName() == "logf")
     {
-      callI->setOperand(0,lg2Fun); //convert log to lg2 function call
+      callI->setCalledFunction(lg2Fun); //convert log to lg2 function call
       Constant* lg2EConst =
 	ConstantFP::get(Type::getPrimitiveType(callI->getContext(),
 					       Type::FloatTyID),LOG2_E_REC);
@@ -81,11 +81,11 @@ bool PTXBackendInsertSpecialInstructions::replaceSpecialFunctionsWithPTXInstr(
     {
       // create and insert instructions
       CallInst* callLg2 =
-	CallInst::Create(lg2Fun, callI->getOperand(1)); //log2(a)
+	CallInst::Create(lg2Fun, callI->getArgOperand(0)); //log2(a)
       callLg2->insertBefore(callI);
       BinaryOperator* MulInst =
 	BinaryOperator::Create(Instruction::FMul,
-			       callI->getOperand(2), callLg2); //x * log2(a)
+			       callI->getArgOperand(1), callLg2); //x * log2(a)
 
       MulInst->insertBefore(callI);
       CallInst* callEx2 = CallInst::Create(ex2Fun, MulInst); // ex2(x * lg2(a))
@@ -102,21 +102,21 @@ bool PTXBackendInsertSpecialInstructions::replaceSpecialFunctionsWithPTXInstr(
   //sinf = llvm.sin
   if(F->getName() == "sinf")
     {
-      callI->setOperand(0,sinFun);  // set function call do llvm.sin
+      callI->setCalledFunction(sinFun);  // set function call do llvm.sin
       return true;
     }
   //cosf = llvm.cos
   else if(F->getName() == "cosf")
     {
-      callI->setOperand(0,cosFun);  // set function call do llvm.sin
+      callI->setCalledFunction(cosFun);  // set function call do llvm.sin
       return true;
     }
   // tan(x) = sin(x) / cos(x)
   else if(F->getName() == "tanf")
     {
       CallInst* callSin = callI;
-      callSin->setOperand(0,sinFun);  // set function call do sin
-      CallInst* callCos = CallInst::Create(cosFun,callI->getOperand(1));
+      callSin->setCalledFunction(sinFun);  // set function call do sin
+      CallInst* callCos = CallInst::Create(cosFun,callI->getArgOperand(0));
       callCos->insertAfter(callSin);
       BinaryOperator* DivInst =
 	BinaryOperator::Create(Instruction::FDiv, callSin, callCos);
@@ -131,8 +131,8 @@ bool PTXBackendInsertSpecialInstructions::replaceSpecialFunctionsWithPTXInstr(
   else if(F->getName() == "atanf")
     {
       CallInst* callSin = callI;
-      callSin->setOperand(0,sinFun);  // set function call do sin
-      CallInst* callCos = CallInst::Create(cosFun,callI->getOperand(1));
+      callSin->setCalledFunction(sinFun);  // set function call do sin
+      CallInst* callCos = CallInst::Create(cosFun,callI->getArgOperand(0));
       callCos->insertAfter(callSin);
       BinaryOperator* DivInst =
 	BinaryOperator::Create(Instruction::FDiv, callCos, callSin);

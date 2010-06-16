@@ -68,7 +68,7 @@ namespace liberty {
 
     // Use the TargetMachine to add lowering passes
     PassManager PM;
-    Target->addPassesToEmitWholeFile(PM, Out, FileType, OLvl, DisableVerify);
+    Target->addPassesToEmitFile(PM, Out, FileType, OLvl, DisableVerify);
 
     // Lower the module to PTX
     PM.run(*mod);
